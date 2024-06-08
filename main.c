@@ -611,7 +611,7 @@ void main()
 
 	length = 0;
 	send_dummy = 1;
-	LED = 0;
+	LED = 1;
 
 	while (1)
 	{
@@ -661,7 +661,7 @@ void main()
 					}
 					else if (read_en)
 					{
-						LED = P2B5;
+						LED = !P2B5;
 						TDI = P2B4;
 						TMS = P2B1;
 						TCK = P2B0;
@@ -671,7 +671,7 @@ void main()
 					}
 					else
 					{
-						LED = P2B5;
+						LED = !P2B5;
 						TDI = P2B4;
 						TMS = P2B1;
 						TCK = P2B0;
