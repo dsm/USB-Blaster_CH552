@@ -173,14 +173,16 @@ void USBDeviceEndPointCfg()
 void DeviceInterrupt(void) __interrupt(INT_NO_USB) //USB中断服务程序,使用寄存器组1
 {
 	uint16_t len;
-	if ((USB_INT_ST & MASK_UIS_TOKEN) == UIS_TOKEN_SOF)
-	{
-		sof_count++;
-	}
 	if (UIF_TRANSFER) //USB传输完成标志
 	{
 		switch (USB_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP))
 		{
+		case UIS_TOKEN_SOF | 0:
+		case UIS_TOKEN_SOF | 1:
+		case UIS_TOKEN_SOF | 2:
+			sof_count++;
+			break;
+
 		case UIS_TOKEN_IN | 1: //endpoint 1
 			UEP1_T_LEN = 0;
 			UEP1_CTRL = UEP1_CTRL & ~MASK_UEP_T_RES | UEP_T_RES_NAK; //默认应答NAK
