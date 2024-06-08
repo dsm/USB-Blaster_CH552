@@ -583,21 +583,7 @@ void main()
 	uint16_t timeout_count = 0;
 
 	CfgFsys();   //CH559时钟选择配置
-	//mDelaymS(5); //修改主频等待内部晶振稳定,必加
-	BTN = 1;
-	mDelaymS(50);
-	if (BTN == 0)
-	{
-		mDelaymS(50);
-		if (BTN == 0)
-		{
-			EA = 0;
-			mDelaymS(100);
-			(*(void (*)(void))0x3800)(); // goto bootloader.
-			while (1)
-				;
-		}
-	}
+	mDelaymS(5); //修改主频等待内部晶振稳定,必加
 
 	USBDeviceCfg();
 	USBDeviceEndPointCfg(); //端点配置
