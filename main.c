@@ -13,10 +13,7 @@
 
 #include "ftdi.h"
 
-#define BTN_PIN 2 //P3.2 for bootloader entry.
-SBIT(BTN, 0xB0, BTN_PIN);
-
-SBIT(LED, 0x90, 1);
+SBIT(LED, 0x90, 1); // P1.1
 /*
 SBIT(TMS, 0x90, 4);
 SBIT(TCK, 0x90, 5);
@@ -24,10 +21,10 @@ SBIT(TDI, 0x90, 6);
 SBIT(TDO, 0x90, 7);
 */
 
-SBIT(TMS, 0x90, 4);
-SBIT(TCK, 0x90, 7);
-SBIT(TDI, 0x90, 5);
-SBIT(TDO, 0x90, 6);
+SBIT(TMS, 0xB0, 2); // P3.2
+SBIT(TCK, 0x90, 7); // P1.7
+SBIT(TDI, 0x90, 5); // P1.5
+SBIT(TDO, 0x90, 6); // P1.6
 
 SBIT(P2B7, 0xA0, 7);
 SBIT(P2B6, 0xA0, 6);
@@ -606,10 +603,13 @@ void main()
 	USBDeviceEndPointCfg(); //端点配置
 	USBDeviceIntCfg();		//中断初始化
 
-	//P1.1 P1.4 P1.5 P1.6 output push-pull.
-	//P1.7 input.
-	P1_MOD_OC = 0x40;
-	P1_DIR_PU = 0xf2;
+	//P1.1, 1.5, 1.7 output push-pull, P1.6 input
+	P1_MOD_OC &= ~((1 << 1) | (1 << 5) | (1 << 7));
+	P1_MOD_OC |= (1 << 6);
+	P1_DIR_PU |= ((1 << 1) | (1 << 5) | (1 << 7) | (1 << 6));
+	//P3.2 output push-pull
+	P3_MOD_OC &= ~(1 << 2);
+	P3_DIR_PU |= (1 << 2);
 	TDO = 1;
 
 	UEP0_T_LEN = 0;
