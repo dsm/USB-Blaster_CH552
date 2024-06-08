@@ -15,5 +15,5 @@
 #define FTDI_VEN_REQ_ES_EEPROM          0x92
 
 #define FTDI_MODEM_STA_SIZE             0x02
-#define FTDI_MODEM_STA_DUMMY0           0x01
+#define FTDI_MODEM_STA_DUMMY0           0x31
 #define FTDI_MODEM_STA_DUMMY1           0x60
