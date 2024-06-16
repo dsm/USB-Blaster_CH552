@@ -4,4 +4,6 @@ This is a fork of [CH55x-USB-Blaster firmware by VladimirDuan](https://github.co
 
 Compile with [ch554_sdcc SDK](https://github.com/Blinkinlabs/ch554_sdcc).
 
+For background information on this project, [see my blog post](https://www.downtowndougbrown.com/2024/06/fixing-a-knockoff-altera-usb-blaster-that-never-worked/).
+
 License: MIT
