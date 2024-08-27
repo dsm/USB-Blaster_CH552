@@ -19,12 +19,11 @@ CODE_SIZE = 0x2800
 EXTRA_FLAGS = --opt-code-speed
 
 C_FILES = \
-	main.c \
-	../../include/debug.c
+	main.c debug.c
 
 #EXTRA_FLAGS += -DDE_PRINTF
 
 pre-flash:
 	
 
-include ../Makefile.include
+include Makefile.include

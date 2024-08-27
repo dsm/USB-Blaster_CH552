@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <ch554.h>
-#include <ch554_usb.h>
-#include <debug.h>
+#include "ch554.h"
+#include "ch554_usb.h"
+#include "debug.h"
 
 #include "ftdi.h"
 
