@@ -1,4 +1,4 @@
-# CH55x-USB-Blaster Firmware for "REV. C USB BLASTER" board
+# USB-Blaster Firmware for "REV. C USB BLASTER" board with CH552G chip.
 
 This is a fork of [CH55x-USB-Blaster firmware by VladimirDuan](https://github.com/VladimirDuan/CH55x-USB-Blaster) that runs on a cheap clone Altera USB Blaster with CH552G chip.
 It works correctly in Linux and Windows with my limited testing(I am testing with MAX V CPLD), no special drivers required.
