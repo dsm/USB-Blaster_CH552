@@ -23,7 +23,7 @@ SBIT(TDO, 0x90, 7);
 
 
 //uncomment to enable AS mode
-#define FTDI_AS_MODE
+//#define FTDI_AS_MODE
 
 #ifdef FTDI_AS_MODE
 SBIT(NCS, 0x90,4);
