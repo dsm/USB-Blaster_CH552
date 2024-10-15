@@ -6,4 +6,5 @@ It works correctly in Linux and Windows with my limited testing(I am testing wit
 #
 - This fork added all needed files for correct build.
 - Implement CI to build and release binary files so you don't need to setup or download any build tools or sdk files.
-- support AS mode now.
+- Support AS mode now.
+- Support hardware SPI
