@@ -19,7 +19,7 @@ CODE_SIZE = 0x2800
 EXTRA_FLAGS = --opt-code-speed
 
 C_FILES = \
-	main.c debug.c
+	main.c debug.c spi.c
 
 #EXTRA_FLAGS += -DDE_PRINTF
 
