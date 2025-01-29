@@ -1,7 +1,9 @@
 # USB-Blaster Firmware for "REV. C USB BLASTER" board with CH552G chip.
 
 This is a fork of [CH55x-USB-Blaster firmware by VladimirDuan](https://github.com/VladimirDuan/CH55x-USB-Blaster) that runs on a cheap clone Altera USB Blaster with CH552G chip.
-It works correctly in Linux and Windows with my limited testing(I am testing with MAX V CPLD), no special drivers required.
+It works correctly in Linux and Windows with my limited testing(I am testing with MAX V CPLD), no special drivers required. 
+
+After fork vladimirduan repo and made some changes on locally to succesfully program our cpld product with "cheap clone Altera USB Blaster with CH552G" but after a few days I saw [this blog](https://www.downtowndougbrown.com/2024/06/fixing-a-knockoff-altera-usb-blaster-that-never-worked/) and our changes similar except some additional usb fixes(I don't interest linux anyway) but no one give build instruction or included sdk file etc. I decided to mirror @dougg3 repo and implement github action for automatic build and changed repo name for more searchable and then mxwiser decided to fork my repo and adding as mode and then hardware spi support. I don't remove any commit of @dougg3 anyway it's the story for this repo.
 
 #
 - This fork added all needed files for correct build.
