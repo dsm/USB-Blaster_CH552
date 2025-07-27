@@ -50,7 +50,7 @@ uint8_t vendor_control;
 uint8_t send_dummy;
 
 const uint8_t* pDescr; // USB configuration flags
-USB_SETUP_REQ SetupReqBuf; // Temporarily save the Setup package
+//USB_SETUP_REQ SetupReqBuf; // um: Temporarily save the Setup package not used
 #define UsbSetupBuf ((PUSB_SETUP_REQ)Ep0Buffer)
 
 __code uint8_t ftdi_rom[] = {
@@ -109,11 +109,12 @@ unsigned char __code Manuf_Des[] = {
     'A', 0, 'l', 0, 't', 0, 'e', 0, 'r', 0, 'a', 0 /* Manufacturer: "Altera" */
 };
 
-volatile __idata uint8_t USBByteCount = 0; // Represents the data received by the USB endpoint
-volatile __idata uint8_t USBBufOutPoint = 0; // Get data pointer
-volatile __idata uint16_t sof_count = 0;
-volatile __idata uint8_t ep1_in_busy = 0; // Flag indicating whether the upload endpoint is busy
-volatile __idata uint8_t latency_timer = 4;
+//um: locate it in data
+volatile __data uint8_t USBByteCount = 0; // Represents the data received by the USB endpoint
+volatile __data uint8_t USBBufOutPoint = 0; // Get data pointer
+volatile __data uint16_t sof_count = 0;
+volatile __data uint8_t ep1_in_busy = 0; // Flag indicating whether the upload endpoint is busy
+volatile __data uint8_t latency_timer = 4;
 
 /*******************************************************************************
  * Function Name  : USBDeviceCfg()
@@ -122,10 +123,10 @@ volatile __idata uint8_t latency_timer = 4;
  * Output		 : None
  * Return		 : None
  *******************************************************************************/
-void USBDeviceCfg()
+void USBDeviceCfg(void)
 {
     USB_CTRL = 0x00; // Clear USB control register
-    USB_CTRL &= ~bUC_HOST_MODE; // This bit selects the device mode
+    //USB_CTRL &= ~bUC_HOST_MODE; // um: This bit selects the device mode already zero
     USB_CTRL |= bUC_DEV_PU_EN | bUC_INT_BUSY | bUC_DMA_EN; // USB device and internal pull-up enabled, automatically returns NAK during interrupt before interrupt flag is cleared
     USB_DEV_AD = 0x00; // Device address initialization
     //	 USB_CTRL |= bUC_LOW_SPEED;
@@ -143,7 +144,7 @@ void USBDeviceCfg()
  * Output		 : None
  * Return		 : None
  *******************************************************************************/
-void USBDeviceIntCfg()
+void USBDeviceIntCfg(void)
 {
     USB_INT_EN |= bUIE_SUSPEND; // Enable device hang interrupt
     USB_INT_EN |= bUIE_TRANSFER; // Enable USB transfer completion interrupt
@@ -162,7 +163,7 @@ void USBDeviceIntCfg()
  * Output		 : None
  * Return		 : None
  *******************************************************************************/
-void USBDeviceEndPointCfg()
+void USBDeviceEndPointCfg(void)
 {
     UEP1_DMA = (uint16_t)Ep1Buffer; // Endpoint 1 IN data transmission address
     UEP2_DMA = (uint16_t)Ep2Buffer; // Endpoint 2 OUT data transmission address
@@ -180,13 +181,13 @@ void USBDeviceEndPointCfg()
  *******************************************************************************/
 void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service routine, using register bank 1
 {
-    uint16_t len;
+    uint8_t len;  //um: 8bit is enough
     if (UIF_TRANSFER) // USB transfer completion flag
     {
         switch (USB_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP)) {
-        case UIS_TOKEN_SOF | 0:
-        case UIS_TOKEN_SOF | 1:
-        case UIS_TOKEN_SOF | 2:
+        case UIS_TOKEN_SOF | 0: // um: this should be enough
+        //case UIS_TOKEN_SOF | 1:
+        //case UIS_TOKEN_SOF | 2:
             sof_count++;
             break;
 
@@ -206,6 +207,7 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
             break;
         } break;
         case UIS_TOKEN_SETUP | 0: // SETUP transaction
+	    UEP0_CTRL &= 0xF2;    // um: if the previous request was stalled this fixes a second stall
             len = USB_RX_LEN;
             if (len == (sizeof(USB_SETUP_REQ))) {
                 uint8_t addr;
@@ -281,10 +283,11 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
                             } else if (UsbSetupBuf->wValueL == 2) {
                                 pDescr = Prod_Des;
                                 len = sizeof(Prod_Des);
-                            } else {
+                            } else if (UsbSetupBuf->wValueL == 3) {
                                 pDescr = SerDes;
                                 len = sizeof(SerDes);
                             }
+			    else len = 0xff; // um: reject all strings exept id0..id3 unsupported string
                             break;
                         default:
                             len = 0xff; // Unsupported command or error
@@ -514,10 +517,10 @@ else
         USB_INT_FG = 0xFF; // Clear interrupt flag
     }
 }
-
-__idata uint8_t transmit_buffer_in_offset;
-__idata uint8_t transmit_buffer_out_offset;
-__idata uint8_t send_len;
+// um: locate it in __data
+__data uint8_t transmit_buffer_in_offset;
+__data uint8_t transmit_buffer_out_offset;
+__data uint8_t send_len;
 
 static inline uint8_t shift_data()
 {
@@ -569,7 +572,7 @@ static inline uint8_t shift_data()
 #endif
 }
 
-static inline uint8_t shift_data_AS()
+static inline uint8_t shift_data_AS(void)
 {
 
     TDI = P2B0;
@@ -615,7 +618,7 @@ static inline uint8_t shift_data_AS()
     return P2;
 }
 
-void main()
+void main(void)
 {
     uint8_t length = 0;
     uint8_t read_buffer_index = 0;
@@ -689,7 +692,9 @@ void main()
 				__asm
 					push ar7
 					push a
-					inc _XBUS_AUX	//dptr1
+		                        push _XBUS_AUX        // store XBUS too 
+		                        orl  _XBUS_AUX, #DPS  // only set the DPS bit for DPTR1
+					//inc _XBUS_AUX	//dptr1
 					mov	dptr, #_receive_buffer	//target receive_buffer
 					dec _XBUS_AUX	//dptr0
 					mov	dptr, #_Ep2Buffer	//source Ep2Buffer
@@ -699,6 +704,7 @@ void main()
 					inc dptr
 					.db #0xA5	//WCH 0xA5 instruction
 					djnz ar7, 1$
+					pop _XBUS_AUX
 					pop a
 					pop ar7
 				__endasm;
