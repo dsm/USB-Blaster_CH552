@@ -18,7 +18,7 @@
 // uncomment to enable Hardware SPI
 #define HARDWARE_SPI
 // um: uncomment to replace memcpy by fastcpy
-//#define FAST_COPY
+#define FAST_COPY
 // um: uncomment to use UID SN
 #define UID_SN
 // gpio
