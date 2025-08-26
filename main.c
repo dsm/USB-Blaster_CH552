@@ -17,7 +17,10 @@
 #define FTDI_AS_MODE
 // uncomment to enable Hardware SPI
 #define HARDWARE_SPI
-
+// um: uncomment to replace memcpy by fastcpy
+#define FAST_COPY
+// um: uncomment to use UID SN
+#define UID_SN
 // gpio
 SBIT(LED, 0x90, 1); // P1.1
 SBIT(TMS, 0xB0, 2); // P3.2
@@ -40,7 +43,8 @@ SBIT(P2B0, 0xA0, 0);
 
 __xdata __at(0x0000) uint8_t transmit_buffer[128]; // fixed address for ringbuf
 __xdata __at(0x0080) uint8_t receive_buffer[64];
-__xdata __at(0x0100) uint8_t Ep0Buffer[0x08]; // Endpoint 0 OUT & IN buffer, must be an even address
+__xdata __at(0x00C0) uint8_t serno[22];
+__xdata __at(0x0100) uint8_t Ep0Buffer[0x08+2]; // Endpoint 0 OUT & IN buffer, must be an even address
 __xdata __at(0x0140) uint8_t Ep1Buffer[0x40]; // Endpoint 1 IN buffer
 __xdata __at(0x0180) uint8_t Ep2Buffer[0x40]; // Endpoint 2 OUT buffer, must be an even address
 
@@ -49,8 +53,8 @@ uint8_t SetupReq, Count, UsbConfig;
 uint8_t vendor_control;
 uint8_t send_dummy;
 
-const uint8_t* pDescr; // USB configuration flags
-USB_SETUP_REQ SetupReqBuf; // Temporarily save the Setup package
+//const uint8_t* pDescr; // um: moved USB descriptor pointer
+//USB_SETUP_REQ SetupReqBuf; // um: not used Temporarily save the Setup package
 #define UsbSetupBuf ((PUSB_SETUP_REQ)Ep0Buffer)
 
 __code uint8_t ftdi_rom[] = {
@@ -91,12 +95,13 @@ __code uint8_t CfgDesc[] = {
 
 /* USB String Descriptors (optional) */
 unsigned char __code LangDes[] = { 0x04, 0x03, 0x09, 0x04 }; // EN_US
+#ifndef UID_SN
 unsigned char __code SerDes[] = {
     // TODO: variable SN.
     sizeof(SerDes), 0x03,
     'C', 0, '0', 0, 'B', 0, 'F', 0, 'A', 0, '6', 0, 'D', 0, '7', 0 /* "C0BFA6D7" */
 };
-
+#endif
 unsigned char __code Prod_Des[] = {
     sizeof(Prod_Des),
     0x03,
@@ -109,27 +114,28 @@ unsigned char __code Manuf_Des[] = {
     'A', 0, 'l', 0, 't', 0, 'e', 0, 'r', 0, 'a', 0 /* Manufacturer: "Altera" */
 };
 
-volatile __idata uint8_t USBByteCount = 0; // Represents the data received by the USB endpoint
-volatile __idata uint8_t USBBufOutPoint = 0; // Get data pointer
-volatile __idata uint16_t sof_count = 0;
-volatile __idata uint8_t ep1_in_busy = 0; // Flag indicating whether the upload endpoint is busy
-volatile __idata uint8_t latency_timer = 4;
+//um: locate it in data
+volatile __data uint8_t USBByteCount = 0; // Represents the data received by the USB endpoint
+volatile __data uint8_t USBBufOutPoint = 0; // Get data pointer
+volatile __data uint16_t sof_count = 0;
+volatile __data uint8_t ep1_in_busy = 0; // Flag indicating whether the upload endpoint is busy
+volatile __data uint8_t latency_timer = 4;
 
 /*******************************************************************************
  * Function Name  : USBDeviceCfg()
- * Description	: Configure USB
- * Input		  : None
- * Output		 : None
- * Return		 : None
+ * Description  : Configure USB
+ * Input      : None
+ * Output    : None
+ * Return    : None
  *******************************************************************************/
-void USBDeviceCfg()
+void USBDeviceCfg(void)
 {
     USB_CTRL = 0x00; // Clear USB control register
-    USB_CTRL &= ~bUC_HOST_MODE; // This bit selects the device mode
+    //USB_CTRL &= ~bUC_HOST_MODE; // um: This bit selects the device mode already zero
     USB_CTRL |= bUC_DEV_PU_EN | bUC_INT_BUSY | bUC_DMA_EN; // USB device and internal pull-up enabled, automatically returns NAK during interrupt before interrupt flag is cleared
     USB_DEV_AD = 0x00; // Device address initialization
-    //	 USB_CTRL |= bUC_LOW_SPEED;
-    //	 UDEV_CTRL |= bUD_LOW_SPEED;			//Select low speed 1.5M mode
+    //   USB_CTRL |= bUC_LOW_SPEED;
+    //   UDEV_CTRL |= bUD_LOW_SPEED;      //Select low speed 1.5M mode
     USB_CTRL &= ~bUC_LOW_SPEED;
     UDEV_CTRL &= ~bUD_LOW_SPEED; // Select full speed 12M mode, the default mode
     UDEV_CTRL = bUD_PD_DIS; // Disable DP/DM pull-down resistor
@@ -138,12 +144,12 @@ void USBDeviceCfg()
 
 /*******************************************************************************
  * Function Name  : USBDeviceIntCfg()
- * Description	: USB device mode interrupt initialization
- * Input		  : None
- * Output		 : None
- * Return		 : None
+ * Description  : USB device mode interrupt initialization
+ * Input      : None
+ * Output    : None
+ * Return    : None
  *******************************************************************************/
-void USBDeviceIntCfg()
+void USBDeviceIntCfg(void)
 {
     USB_INT_EN |= bUIE_SUSPEND; // Enable device hang interrupt
     USB_INT_EN |= bUIE_TRANSFER; // Enable USB transfer completion interrupt
@@ -156,13 +162,13 @@ void USBDeviceIntCfg()
 
 /*******************************************************************************
  * Function Name  : USBDeviceEndPointCfg()
- * Description	: USB device mode endpoint configuration, emulation compatible HID device,
- *		  in addition to endpoint 0 control transmission, also includes endpoint 2 batch up and down transmission
- * Input		  : None
- * Output		 : None
- * Return		 : None
+ * Description  : USB device mode endpoint configuration, emulation compatible HID device,
+ *      in addition to endpoint 0 control transmission, also includes endpoint 2 batch up and down transmission
+ * Input      : None
+ * Output    : None
+ * Return    : None
  *******************************************************************************/
-void USBDeviceEndPointCfg()
+void USBDeviceEndPointCfg(void)
 {
     UEP1_DMA = (uint16_t)Ep1Buffer; // Endpoint 1 IN data transmission address
     UEP2_DMA = (uint16_t)Ep2Buffer; // Endpoint 2 OUT data transmission address
@@ -173,18 +179,97 @@ void USBDeviceEndPointCfg()
     UEP4_1_MOD = 0x40; // Endpoint 1 upload buffer; endpoint 0 single 64-byte send and receive buffer
     UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK; // Manual flip, OUT transaction returns ACK, IN transaction returns NAK
 }
+/*******************************************************************************
+ * Function Name : fastcpy()
+ * Description   : custom memcopy function for __code and __xdata only
+ * Input         : ptr for src and dest, len (8 Bit)
+ * Output        : none 
+ * Attention     : src and dest params are switched for more compact code
+*******************************************************************************/
+#ifdef FAST_COPY
+void fastcpy(void *src, void *dest, uint8_t len)
+{ 
+  dest; src; len;
+   __asm
+       mov    A,_fastcpy_PARM_3
+       jnz    0$                      ; nothing todo -> exit
+       ret
+0$:
+       push   ar7
+       mov    R7,A                    ; Param 3 is loop counter
+       push   _XBUS_AUX               ; save aux reg
+       orl    _XBUS_AUX,#0x05         ; select DPTR1 + autoinc
+       mov    DPL,_fastcpy_PARM_2+0   ; and load &dest to DPTR1
+       mov    DPH,_fastcpy_PARM_2+1   ;
+       dec    _XBUS_AUX               ; DPTR0 = *src
+       mov    A,B                     ; 0x00 -> XDATA 
+       JNZ    2$
 
+1$:                                   ; xmem loop 
+       movx   A,@DPTR                 ; read source (xmem) with autoinc
+       .db    0xA5                    ; MOVX @DPTR1,A & INC DPTR1
+       djnz   R7,1$
+       sjmp   3$                      ;done 
+
+2$:                                   ; cmem loop 
+       clr    A
+       movc   A,@A+DPTR               ; read source (codemem)
+       inc    DPTR                    ; src ++ no autoinc 
+       .db    0xA5                    ; MOVX @DPTR1,A & INC DPTR1
+       djnz   R7,2$    
+3$:    pop    _XBUS_AUX               ; done 
+       pop    ar7
+       ret
+   __endasm;
+}
+#endif
+
+#ifdef UID_SN
+/*
+  um: Create a unique serial nummber based on CH552 UID
+*/
+#define CBYTE ((uint8_t volatile __code  *) 0)
+__code uint8_t alpha[16] = {'0','1','2','3','4','5','6','7',
+                            '8','9','A','B','C','D','E','F'};
+void Init_UsbSerialNo(void)
+{
+   uint8_t b;
+   serno[0] = 22;  serno[1] = 3;
+
+   b = CBYTE[ROM_CHIP_ID_HX];
+   serno[2] = alpha [b >> 4];   serno[3]=0;
+   serno[4] = alpha [b & 0x0F]; serno[5]=0;
+
+   b = CBYTE[ROM_CHIP_ID_LO];
+   serno[6] = alpha [b >> 4];   serno[7]=0;
+   serno[8] = alpha [b & 0x0F]; serno[9]=0;
+
+   b = CBYTE[ROM_CHIP_ID_LO+1];
+   serno[10] = alpha [b >> 4];   serno[11]=0;
+   serno[12] = alpha [b & 0x0F]; serno[13]=0;
+
+   b = CBYTE[ROM_CHIP_ID_LO+2];
+   serno[14] = alpha [b >> 4];   serno[15]=0;
+   serno[16] = alpha [b & 0x0F]; serno[17]=0;
+
+   b = CBYTE[ROM_CHIP_ID_LO+3];
+   serno[18] = alpha [b >> 4];   serno[19]=0;
+   serno[20] = alpha [b & 0x0F]; serno[21]=0;
+}
+#endif                           
 /*******************************************************************************
  * Function Name  : DeviceInterrupt()
- * Description	: CH55xUSB interrupt processing function
+ * Description  : CH55xUSB interrupt processing function
  *******************************************************************************/
 void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service routine, using register bank 1
 {
-    uint16_t len;
+    static const uint8_t* pDescr; // um: USB descriptor pointer
+    uint8_t len;                  // um: 8bit is enough
+    
     if (UIF_TRANSFER) // USB transfer completion flag
     {
         switch (USB_INT_ST & (MASK_UIS_TOKEN | MASK_UIS_ENDP)) {
-        case UIS_TOKEN_SOF | 0:
+        case UIS_TOKEN_SOF | 0: 
         case UIS_TOKEN_SOF | 1:
         case UIS_TOKEN_SOF | 2:
             sof_count++;
@@ -196,7 +281,6 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
             ep1_in_busy = 0;
             break;
         case UIS_TOKEN_OUT | 2: // endpoint 2
-        {
             if (U_TOG_OK) // Out-of-sync packets will be discarded
             {
                 USBByteCount = USB_RX_LEN;
@@ -204,8 +288,8 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
                 UEP2_CTRL = UEP2_CTRL & ~MASK_UEP_R_RES | UEP_R_RES_NAK; // NAK is sent when a packet of data is received. After the main function completes the processing, the main function modifies the response mode.
             }
             break;
-        } break;
         case UIS_TOKEN_SETUP | 0: // SETUP transaction
+            UEP0_CTRL &= 0xF2;    // um: if the previous request was stalled this fixes a second stall
             len = USB_RX_LEN;
             if (len == (sizeof(USB_SETUP_REQ))) {
                 uint8_t addr;
@@ -281,10 +365,16 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
                             } else if (UsbSetupBuf->wValueL == 2) {
                                 pDescr = Prod_Des;
                                 len = sizeof(Prod_Des);
-                            } else {
+                            } else if (UsbSetupBuf->wValueL == 3) {
+#ifdef UID_SN
+                                pDescr = serno;
+                                len    = sizeof(serno);
+#else
                                 pDescr = SerDes;
                                 len = sizeof(SerDes);
+#endif
                             }
+                            else len = 0xff; // um: reject all strings exept id0..id3 unsupported string
                             break;
                         default:
                             len = 0xff; // Unsupported command or error
@@ -294,7 +384,11 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
                             SetupLen = len; // Limit total length
                         }
                         len = SetupLen >= DEFAULT_ENDP0_SIZE ? DEFAULT_ENDP0_SIZE : SetupLen; // The length of this transmission
+#ifndef FAST_COPY
                         memcpy(Ep0Buffer, pDescr, len); // Loading Upload Data
+#else
+                        fastcpy(pDescr,Ep0Buffer, len);
+#endif
                         SetupLen -= len;
                         pDescr += len;
                         break;
@@ -414,9 +508,9 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
                         break;
                     }
                 }
-            } else {
-                len = 0xff; // Packet length error
-            }
+            } 
+            else len = 0xff; // Packet length error
+            
             if (len == 0xff) {
                 SetupReq = 0xFF;
                 UEP0_CTRL = bUEP_R_TOG | bUEP_T_TOG | UEP_R_RES_STALL | UEP_T_RES_STALL; // STALL
@@ -433,7 +527,11 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
             switch (SetupReq) {
             case USB_GET_DESCRIPTOR:
                 len = SetupLen >= DEFAULT_ENDP0_SIZE ? DEFAULT_ENDP0_SIZE : SetupLen; // The length of this transmission
+#ifndef FAST_COPY
                 memcpy(Ep0Buffer, pDescr, len); // Loading Upload Data
+#else
+                fastcpy(pDescr,Ep0Buffer, len);
+#endif
                 SetupLen -= len;
                 pDescr += len;
                 UEP0_T_LEN = len;
@@ -452,18 +550,18 @@ void DeviceInterrupt(void) __interrupt(INT_NO_USB) // USB interrupt service rout
             }
             break;
         case UIS_TOKEN_OUT | 0: // endpoint0 OUT
-            /*if(SetupReq ==SET_LINE_CODING)  //Set serial port properties
-{
-if( U_TOG_OK )
-{
-//	memcpy(LineCoding,UsbSetupBuf,USB_RX_LEN);
-//	Config_Uart1(LineCoding);
-UEP0_T_LEN = 0;
-UEP0_CTRL |= UEP_R_RES_ACK | UEP_T_RES_ACK;  // Prepare to upload 0 packages
-}
-}
-else
-{*/
+/*          if(SetupReq ==SET_LINE_CODING)  //Set serial port properties
+            {
+               if( U_TOG_OK )
+               {
+                  //  memcpy(LineCoding,UsbSetupBuf,USB_RX_LEN);
+                  //  Config_Uart1(LineCoding);
+                  UEP0_T_LEN = 0;
+                  UEP0_CTRL |= UEP_R_RES_ACK | UEP_T_RES_ACK;  // Prepare to upload 0 packages
+               }
+            }
+            else
+            {*/
             UEP0_T_LEN = 0;
             UEP0_CTRL |= UEP_R_RES_ACK | UEP_T_RES_ACK; // Status phase, respond to IN with NAK
             //}
@@ -514,12 +612,12 @@ else
         USB_INT_FG = 0xFF; // Clear interrupt flag
     }
 }
+// um: locate it in __data
+__data uint8_t transmit_buffer_in_offset;
+__data uint8_t transmit_buffer_out_offset;
+__data uint8_t send_len;
 
-__idata uint8_t transmit_buffer_in_offset;
-__idata uint8_t transmit_buffer_out_offset;
-__idata uint8_t send_len;
-
-static inline uint8_t shift_data()
+static inline uint8_t shift_data(void)
 {
 
 #ifndef HARDWARE_SPI
@@ -569,7 +667,7 @@ static inline uint8_t shift_data()
 #endif
 }
 
-static inline uint8_t shift_data_AS()
+static inline uint8_t shift_data_AS(void)
 {
 
     TDI = P2B0;
@@ -615,7 +713,7 @@ static inline uint8_t shift_data_AS()
     return P2;
 }
 
-void main()
+void main(void)
 {
     uint8_t length = 0;
     uint8_t read_buffer_index = 0;
@@ -625,8 +723,19 @@ void main()
     uint8_t read_en = 0;
     uint16_t timeout_count = 0;
 
+    //check for a connection between pin9 and pin 10
+    if (TDI==0) //um: goto bootloader if TDI is shortened to gnd
+    {
+       __asm
+         LJMP BOOT_LOAD_ADDR
+       __endasm;
+    } 
     CfgFsys(); // CH552 clock selection configuration
     mDelaymS(5); // wait for clock become stabilize.
+
+#ifdef UID_SN
+    Init_UsbSerialNo();
+#endif
 
 #ifdef HARDWARE_SPI
     SPIMasterModeSet(0);
@@ -684,27 +793,34 @@ void main()
             if (USBByteCount) // The USB receiving endpoint has data
             {
                 // memcpy(receive_buffer, Ep2Buffer, USBByteCount);
-                /* clang-format off */
-
-				__asm
-					push ar7
-					push a
-					inc _XBUS_AUX	//dptr1
-					mov	dptr, #_receive_buffer	//target receive_buffer
-					dec _XBUS_AUX	//dptr0
-					mov	dptr, #_Ep2Buffer	//source Ep2Buffer
-					mov ar7, _USBByteCount
-				1$:	
-					movx a, @dptr
-					inc dptr
-					.db #0xA5	//WCH 0xA5 instruction
-					djnz ar7, 1$
-					pop a
-					pop ar7
-				__endasm;
+#ifdef FAST_COPY                
+                EA=0;
+                fastcpy(Ep2Buffer, receive_buffer, USBByteCount);
+                EA=1;
+#else
+               /* clang-format off */
+                __asm
+                  push ar7
+                  push a
+                  push _XBUS_AUX        // store XBUS too 
+                  orl  _XBUS_AUX, #DPS  // only set the DPS bit for DPTR1
+                  //inc _XBUS_AUX //dptr1
+                  mov dptr, #_receive_buffer  //target receive_buffer
+                  dec _XBUS_AUX //dptr0
+                  mov dptr, #_Ep2Buffer //source Ep2Buffer
+                  mov ar7, _USBByteCount
+                1$: 
+                  movx a, @dptr
+                  inc dptr
+                  .db #0xA5 //WCH 0xA5 instruction
+                  djnz ar7, 1$
+                  pop _XBUS_AUX
+                  pop a
+                  pop ar7
+                __endasm;
 
                 /* clang-format on */
-
+#endif
                 UEP2_CTRL = UEP2_CTRL & ~MASK_UEP_R_RES | UEP_R_RES_ACK;
                 length = USBByteCount;
                 USBByteCount = 0;
